@@ -1,3 +1,10 @@
+// =============================================================================
+// Moneflow — Prisma schema (PostgreSQL)
+//
+// Single source of truth for the database. Balances live ONLY in PostgreSQL:
+// no fake balance values are ever computed in the frontend.
+// =============================================================================
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,12 +14,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ===========================================================================
+// =============================================================================
 // Enums
-// ===========================================================================
+// =============================================================================
 
 enum TransactionType {
-  TRANSFER           // direct send-money between two users
+  TRANSFER // direct send-money between two users
   REQUEST_SETTLEMENT // settlement of an approved money request
 }
 
@@ -29,37 +36,43 @@ enum RequestStatus {
   CANCELLED
 }
 
-// ===========================================================================
+// =============================================================================
 // User
-// ===========================================================================
+// =============================================================================
 
 model User {
   id        String   @id @default(uuid())
   name      String
   email     String   @unique
   phone     String?  @unique
-  password  String // bcrypt hash
+  password  String // bcrypt hash — plaintext passwords are NEVER stored
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  account              Account?        // one-to-one: exactly one account per user
-  sentTransactions     Transaction[]   @relation("SenderTransactions")
-  receivedTransactions Transaction[]   @relation("ReceiverTransactions")
-  sentRequests         MoneyRequest[]  @relation("RequesterRequests")
-  receivedRequests     MoneyRequest[]  @relation("RequestedFromRequests")
+  // One user has exactly one account (one-to-one, enforced by Account.userId @unique).
+  account Account?
 
+  // Money requests where this user is the requester (wants to RECEIVE money)
+  // or the requested-from user (asked to PAY).
+  sentRequests     MoneyRequest[] @relation("RequesterRequests")
+  receivedRequests MoneyRequest[] @relation("RequestedFromRequests")
+
+  // NOTE: transaction history is reachable through the user's Account
+  // (Account.sentTransactions / Account.receivedTransactions), because every
+  // Transaction references sender/receiver *accounts* — this is what keeps the
+  // audit trail immutable even if a user profile changes.
   @@index([name])
 }
 
-// ===========================================================================
+// =============================================================================
 // Account
-// ===========================================================================
+// =============================================================================
 
 model Account {
   id        String   @id @default(uuid())
-  userId    String   @unique
-  balance   Decimal  @default(0) @db.Decimal(18, 2) // BDT, 2 decimal places
+  userId    String   @unique // one-to-one: exactly one account per user
+  balance   Decimal  @default(0) @db.Decimal(18, 2) // BDT, 2 decimal places (poisha)
   currency  String   @default("BDT")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -69,24 +82,25 @@ model Account {
   sentTransactions     Transaction[] @relation("SenderAccountTransactions")
   receivedTransactions Transaction[] @relation("ReceiverAccountTransactions")
 
-  // NOTE: the BDT 100,000 welcome credit is applied in the registration
-  // service inside the same DB transaction that creates the user+account,
-  // not baked into the schema default, so the rule is explicit and auditable.
+  // NOTE: the BDT 100,000 welcome credit is applied by an explicit database
+  // operation inside the same DB transaction that creates the user + account
+  // (registration service / seed script). It is NOT baked into the schema
+  // default, so every balance change is explicit and auditable.
 }
 
-// ===========================================================================
-// Transaction
-// ===========================================================================
+// =============================================================================
+// Transaction  — append-only money-movement ledger
+// =============================================================================
 
 model Transaction {
-  id        String            @id @default(uuid())
-  type      TransactionType
-  status    TransactionStatus @default(PENDING)
+  id     String            @id @default(uuid())
+  type   TransactionType
+  status TransactionStatus @default(PENDING)
 
   senderAccountId   String
   receiverAccountId String
-  amount            Decimal    @db.Decimal(18, 2) // always positive
-  currency          String     @default("BDT")
+  amount            Decimal @db.Decimal(18, 2) // always positive
+  currency          String  @default("BDT")
 
   // ---- Audit snapshot (set once at creation, immutable) ----
   senderNameAtTime     String
@@ -97,6 +111,7 @@ model Transaction {
   idempotencyKey String
   description    String?
 
+  // Populated when this transaction settles an approved money request.
   moneyRequestId String?
   moneyRequest   MoneyRequest? @relation(fields: [moneyRequestId], references: [id], onDelete: Restrict)
 
@@ -106,19 +121,20 @@ model Transaction {
   senderAccount   Account @relation("SenderAccountTransactions", fields: [senderAccountId], references: [id], onDelete: Restrict)
   receiverAccount Account @relation("ReceiverAccountTransactions", fields: [receiverAccountId], references: [id], onDelete: Restrict)
 
-  // Idempotency: one key per sender per operation.
+  // Idempotency: one key per sender per operation — replayed requests get the
+  // same transaction and can never double-spend.
   @@unique([senderAccountId, idempotencyKey])
-  // History lookups ("all my transactions", ordered newest-first).
+  // History lookups ("all my transactions", newest-first).
   @@index([senderAccountId, createdAt])
   @@index([receiverAccountId, createdAt])
-  // Incoming/outgoing status filters and request-settlement lookups.
+  // Status filters and request-settlement lookups.
   @@index([status])
   @@index([moneyRequestId])
 }
 
-// ===========================================================================
-// MoneyRequest
-// ===========================================================================
+// =============================================================================
+// MoneyRequest  — "please pay me" / "please pay X"
+// =============================================================================
 
 model MoneyRequest {
   id              String        @id @default(uuid())
@@ -132,16 +148,17 @@ model MoneyRequest {
   idempotencyKey String
 
   respondedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   requester     User          @relation("RequesterRequests", fields: [requesterId], references: [id], onDelete: Restrict)
   requestedFrom User          @relation("RequestedFromRequests", fields: [requestedFromId], references: [id], onDelete: Restrict)
-  settlements   Transaction[] // approved request -> settlement transaction(s)
+  settlements   Transaction[] // APPROVED request -> settlement transaction(s)
 
   // Idempotency: one key per requester per operation.
   @@unique([requesterId, idempotencyKey])
-  // "Pending requests for me" is the hot read: WHERE requestedFromId=? AND status='PENDING' ORDER BY createdAt DESC.
+  // "Pending requests for me" is the hot read:
+  // WHERE requestedFromId=? AND status='PENDING' ORDER BY createdAt DESC.
   @@index([requestedFromId, status, createdAt])
   // "My sent requests".
   @@index([requesterId, createdAt])

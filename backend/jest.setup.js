@@ -12,10 +12,8 @@ afterAll(async () => {
 
 afterEach(async () => {
   const models = [
-    'idempotencyKey',
     'transaction',
     'moneyRequest',
-    'transfer',
     'account',
     'user',
   ];

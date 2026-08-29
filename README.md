@@ -59,9 +59,16 @@ npm install
 cp backend/.env.example backend/.env
 # Edit backend/.env with your DATABASE_URL and JWT_SECRET
 
-# Generate Prisma client and run migrations
+# Validate schema, generate Prisma client and run migrations
+npm run db:validate
 npm run db:generate
 npm run db:migrate
+
+# Seed the database with demo users + sample data
+npm run db:seed
+
+# (or the single-step fresh demo setup: reset + migrations + seed)
+npm run db:reset
 
 # Start development servers
 npm run dev
@@ -76,9 +83,15 @@ npm run dev:backend      # Start backend only
 npm run dev:frontend     # Start frontend only
 
 # Database
+npm run db:validate      # Validate prisma/schema.prisma
 npm run db:generate      # Generate Prisma client
-npm run db:migrate       # Run migrations
-npm run db:push          # Push schema changes
+npm run db:migrate       # Create & apply a migration (dev)
+npm run db:deploy        # Apply migrations in production / CI
+npm run db:status        # Show migration status
+npm run db:seed          # Seed demo users + sample data
+npm run db:reset         # Reset database, re-migrate and re-seed (dev)
+npm run db:reset:no-seed # Reset database only
+npm run db:push          # Push schema changes (no migration history)
 npm run db:studio        # Open Prisma Studio
 
 # Testing
@@ -88,6 +101,51 @@ npm run test:watch       # Run tests in watch mode
 # Linting
 npm run lint             # Lint all packages
 ```
+
+### Database & Seed
+
+The database is PostgreSQL managed by Prisma. Full documentation (schema,
+constraints, commands, seed behaviour) lives in
+[`docs/database.md`](docs/database.md).
+
+```bash
+# Migration commands
+npm run db:migrate                 # create + apply a new migration (dev)
+npm run db:deploy                  # apply migrations (prod/CI)
+
+# Reset commands (development)
+npm run db:reset                   # drop everything, re-migrate, re-seed
+npm run db:reset:no-seed           # drop everything, re-migrate (empty DB)
+
+# Seed commands
+npm run db:seed                    # seed an empty, migrated database
+```
+
+**Demo accounts** (all have BDT 100,000 credited at signup / seed):
+
+| Email                 | Password       |
+| --------------------- | -------------- |
+| ayesha@moneflow.dev   | `DemoPass123!` |
+| rafi@moneflow.dev     | `DemoPass123!` |
+| nusrat@moneflow.dev   | `DemoPass123!` |
+| tanvir@moneflow.dev   | `DemoPass123!` |
+| farhan@moneflow.dev   | `DemoPass123!` |
+| sadia@moneflow.dev    | `DemoPass123!` |
+
+**Balance integrity rules**
+
+- Balances are stored **only** in PostgreSQL (`Account.balance`,
+  `DECIMAL(18,2)`) and are the single source of truth — the frontend never
+  fakes or computes them.
+- Passwords are stored only as bcrypt hashes (12 rounds); plaintext never
+  reaches the database.
+- Every balance change is an explicit database operation inside a transaction
+  (row-locked debits/credits), and every movement writes an immutable
+  `Transaction` audit row with `senderBalanceAfter` / `receiverBalanceAfter`
+  snapshots.
+- Key DB constraints: unique email/phone, one account per user, idempotency
+  keys unique per sender/requester, `ON DELETE RESTRICT` foreign keys, and
+  PostgreSQL `ENUM` types for all status/type columns.
 
 ## API Endpoints
 
