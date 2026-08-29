@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRequests } from '../hooks/useMoney';
-import UserSearch from '../components/UserSearch';
+import { UserSearch } from '../components/UserSearch';
 import { useAuth } from '../context/AuthContext';
 import { formatTaka, getStatusBadgeClass } from '../utils/format';
 import { Card, Badge, Modal, Button, Input } from '../components/UI';

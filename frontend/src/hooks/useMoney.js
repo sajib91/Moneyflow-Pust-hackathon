@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { api } from './services/api';
-import { useAuth } from './context/AuthContext';
+import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export function useTransfers() {
   const [loading, setLoading] = useState(false);

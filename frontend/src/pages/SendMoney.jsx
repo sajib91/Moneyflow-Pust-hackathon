@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTransfers } from '../hooks/useMoney';
-import UserSearch from '../components/UserSearch';
+import { UserSearch } from '../components/UserSearch';
 import { formatTaka } from '../utils/format';
 import { Input, Button, Card, Modal } from '../components/UI';
 

@@ -7,7 +7,7 @@ body {
 }
 
 input, button, select, textarea {
-  @apply font-inherit;
+  font: inherit;
 }
 
 .btn {
