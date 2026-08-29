@@ -18,7 +18,7 @@ export async function searchUsers(tx, query, limit, excludeId) {
   return tx.user.findMany({
     where: {
       AND: [
-        { deletedAt: null },
+        { active: true },
         { id: { not: excludeId } },
         {
           OR: [

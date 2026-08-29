@@ -15,10 +15,10 @@ export async function authMiddleware(req, res, next) {
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, email: true, name: true, deletedAt: true },
+      select: { id: true, email: true, name: true, active: true },
     });
 
-    if (!user || user.deletedAt) {
+    if (!user || !user.active) {
       throw new UnauthorizedError('User not found or deactivated');
     }
 
