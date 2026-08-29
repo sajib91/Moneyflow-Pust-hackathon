@@ -18,13 +18,14 @@ export function formatDate(dateString) {
 }
 
 export function getStatusBadgeClass(status) {
-  const classes = {
-    PENDING: 'badge-pending',
-    APPROVED: 'badge-approved',
-    REJECTED: 'badge-rejected',
-    CANCELLED: 'badge-cancelled',
-    SUCCEEDED: 'badge-succeeded',
-    FAILED: 'badge-rejected',
+  // Returns the badge VARIANT (Badge renders `badge badge-${variant}`).
+  const variants = {
+    PENDING: 'pending',
+    APPROVED: 'approved',
+    REJECTED: 'rejected',
+    CANCELLED: 'cancelled',
+    SUCCEEDED: 'succeeded',
+    FAILED: 'rejected',
   };
-  return classes[status] || 'badge';
+  return variants[status] || 'default';
 }

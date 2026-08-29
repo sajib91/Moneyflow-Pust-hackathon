@@ -40,16 +40,19 @@ Creates the user and their account **atomically** (single DB transaction):
 optional `+` · password 8–128 chars with **at least one letter and one
 number**.
 
-**Success — `201 Created`** (no password hash ever returned)
+**Success — `201 Created`** (no password hash ever returned; consistent `{ success, data }` envelope)
 
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": "0991f4c8-fa94-4734-8096-428b26f86472",
-    "name": "Ayesha Rahman",
-    "email": "ayesha@moneflow.dev",
-    "phone": "+8801711000001"
+  "success": true,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": "0991f4c8-fa94-4734-8096-428b26f86472",
+      "name": "Ayesha Rahman",
+      "email": "ayesha@moneflow.dev",
+      "phone": "+8801711000001"
+    }
   }
 }
 ```
@@ -59,16 +62,19 @@ number**.
 | Status | Code | Example |
 | --- | --- | --- |
 | 400 | `VALIDATION_ERROR` | missing/invalid fields (`details` lists each field) |
-| 409 | `EMAIL_EXISTS` | `{ "message": "Email already registered" }` |
-| 409 | `PHONE_EXISTS` | `{ "message": "Phone number already registered" }` |
+| 409 | `EMAIL_EXISTS` | `{ "success": false, "error": { "code": "EMAIL_EXISTS", "message": "Email already registered" } }` |
+| 409 | `PHONE_EXISTS` | `{ "success": false, "error": { "code": "PHONE_EXISTS", "message": "Phone number already registered" } }` |
 
 ```json
 {
-  "error": "VALIDATION_ERROR",
-  "message": "Validation failed",
-  "details": {
-    "body.password": "Password must contain at least one number",
-    "body.email": "A valid email address is required"
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed",
+    "details": {
+      "body.password": "Password must contain at least one number",
+      "body.email": "A valid email address is required"
+    }
   }
 }
 ```
@@ -96,7 +102,7 @@ number**.
 | Status | Code | Message |
 | --- | --- | --- |
 | 400 | `VALIDATION_ERROR` | malformed email / missing password |
-| 401 | `UNAUTHORIZED` | `"Invalid email or password"` |
+| 401 | `INVALID_CREDENTIALS` | `"Invalid email or password"` |
 
 ## Profile — `GET /api/auth/me`
 
@@ -110,13 +116,16 @@ ignored.
 
 ```json
 {
-  "id": "0991f4c8-fa94-4734-8096-428b26f86472",
-  "name": "Ayesha Rahman",
-  "email": "ayesha@moneflow.dev",
-  "phone": "+8801711000001",
-  "balance": "96650.50",
-  "currency": "BDT",
-  "createdAt": "2026-08-29T06:00:00.000Z"
+  "success": true,
+  "data": {
+    "id": "0991f4c8-fa94-4734-8096-428b26f86472",
+    "name": "Ayesha Rahman",
+    "email": "ayesha@moneflow.dev",
+    "phone": "+8801711000001",
+    "balance": "96650.50",
+    "currency": "BDT",
+    "createdAt": "2026-08-29T06:00:00.000Z"
+  }
 }
 ```
 
@@ -124,10 +133,10 @@ ignored.
 
 | Status | Code | Message |
 | --- | --- | --- |
-| 401 | `UNAUTHORIZED` | missing header → `"Authentication required"` |
-| 401 | `UNAUTHORIZED` | expired token → `"Session expired, please log in again"` |
-| 401 | `UNAUTHORIZED` | invalid token → `"Invalid token"` |
-| 401 | `UNAUTHORIZED` | deactivated user → `"User not found or deactivated"` |
+| 401 | `AUTHENTICATION_REQUIRED` | missing header → `"Authentication required"` |
+| 401 | `AUTHENTICATION_REQUIRED` | expired token → `"Session expired, please log in again"` |
+| 401 | `AUTHENTICATION_REQUIRED` | invalid token → `"Invalid token"` |
+| 403 | `USER_INACTIVE` | deactivated user → `"Your account is inactive"` |
 
 ## Middleware & authorization
 

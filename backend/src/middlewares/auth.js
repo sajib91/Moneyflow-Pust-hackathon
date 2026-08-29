@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../config/index.js';
-import { UnauthorizedError } from '../errors/ApiError.js';
+import { AuthenticationRequiredError, UserInactiveError } from '../errors/ApiError.js';
 import prisma from '../config/prisma.js';
 
 /**
@@ -16,12 +16,12 @@ export async function authenticateUser(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
-      throw new UnauthorizedError('Authentication required');
+      throw new AuthenticationRequiredError('Authentication required');
     }
 
     const token = authHeader.slice(7).trim();
     if (!token) {
-      throw new UnauthorizedError('Authentication required');
+      throw new AuthenticationRequiredError('Authentication required');
     }
 
     let decoded;
@@ -29,13 +29,13 @@ export async function authenticateUser(req, res, next) {
       decoded = jwt.verify(token, config.jwt.secret);
     } catch (err) {
       if (err instanceof jwt.TokenExpiredError) {
-        throw new UnauthorizedError('Session expired, please log in again');
+        throw new AuthenticationRequiredError('Session expired, please log in again');
       }
-      throw new UnauthorizedError('Invalid token');
+      throw new AuthenticationRequiredError('Invalid token');
     }
 
     if (!decoded?.id || typeof decoded.id !== 'string') {
-      throw new UnauthorizedError('Invalid token');
+      throw new AuthenticationRequiredError('Invalid token');
     }
 
     const user = await prisma.user.findUnique({
@@ -43,8 +43,11 @@ export async function authenticateUser(req, res, next) {
       select: { id: true, email: true, name: true, active: true },
     });
 
-    if (!user || !user.active) {
-      throw new UnauthorizedError('User not found or deactivated');
+    if (!user) {
+      throw new AuthenticationRequiredError('User not found');
+    }
+    if (!user.active) {
+      throw new UserInactiveError();
     }
 
     req.user = { id: user.id, email: user.email, name: user.name };
@@ -54,7 +57,7 @@ export async function authenticateUser(req, res, next) {
   }
 }
 
-// Backwards-compatible alias (existing routes import authMiddleware).
+// Backwards-compatible alias (legacy route imports).
 export const authMiddleware = authenticateUser;
 
 /** Authenticate only if a token is present; leave req.user undefined otherwise. */

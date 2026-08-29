@@ -74,8 +74,10 @@ export default function Transactions() {
                   {transactions.map(tx => (
                     <tr key={tx.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-3 text-sm text-gray-500">{formatDate(tx.createdAt)}</td>
-                      <td className="py-3"><Badge variant={tx.type === 'CREDIT' ? 'approved' : 'rejected'}>{tx.type}</Badge></td>
-                      <td className="py-3 font-medium {tx.type === 'CREDIT' ? 'text-green-600' : 'text-red-600'}">
+                      <td className="py-3">
+                        <Badge variant={tx.type === 'CREDIT' ? 'approved' : 'rejected'}>{tx.type}</Badge>
+                      </td>
+                      <td className={`py-3 font-medium ${tx.type === 'CREDIT' ? 'text-green-600' : 'text-red-600'}`}>
                         {tx.type === 'CREDIT' ? '+' : '-'}{formatTaka(tx.amount * 100)}
                       </td>
                       <td className="py-3 text-gray-900">{formatTaka(tx.balanceAfter * 100)}</td>

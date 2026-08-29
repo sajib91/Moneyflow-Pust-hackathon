@@ -1,10 +1,16 @@
 const API_BASE = '/api';
 
-class ApiError extends Error {
-  constructor(message, status, data) {
+/**
+ * ApiError carries the server's error code + message.
+ * Server error body: { success:false, error:{ code, message, details? } }
+ */
+export class ApiError extends Error {
+  constructor(message, status, code, details) {
     super(message);
+    this.name = 'ApiError';
     this.status = status;
-    this.data = data;
+    this.code = code;
+    this.details = details;
   }
 }
 
@@ -29,13 +35,25 @@ async function request(endpoint, options = {}) {
     headers,
   });
 
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new ApiError(data.message || 'Request failed', response.status, data);
+  let body = null;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
   }
 
-  return data;
+  // Consistent envelope: success → { success:true, data }, error → { success:false, error:{code,message} }.
+  if (!response.ok || !body || body.success !== true) {
+    const err = body?.error ?? {};
+    throw new ApiError(
+      err.message || 'Request failed',
+      response.status,
+      err.code || 'INTERNAL_ERROR',
+      err.details,
+    );
+  }
+
+  return body.data;
 }
 
 export const api = {
@@ -65,5 +83,3 @@ export const api = {
     get: (id) => request(`/transactions/${id}`),
   },
 };
-
-export { ApiError };

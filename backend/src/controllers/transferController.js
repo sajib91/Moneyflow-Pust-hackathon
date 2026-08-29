@@ -1,4 +1,5 @@
 import * as transferService from '../services/transferService.js';
+import { respond } from '../utils/respond.js';
 
 export async function sendMoney(req, res, next) {
   try {
@@ -8,7 +9,7 @@ export async function sendMoney(req, res, next) {
       amount: req.body.amount,
       idempotencyKey: req.idempotencyKey,
     });
-    res.status(201).json(result);
+    return respond(res, 201, result);
   } catch (err) {
     next(err);
   }
@@ -17,7 +18,7 @@ export async function sendMoney(req, res, next) {
 export async function getBalance(req, res, next) {
   try {
     const result = await transferService.getBalance(req.user.id);
-    res.json(result);
+    return respond(res, 200, result);
   } catch (err) {
     next(err);
   }

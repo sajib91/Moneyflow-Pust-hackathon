@@ -2,7 +2,13 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { Prisma } from '@prisma/client';
 import { config } from '../config/index.js';
-import { UnauthorizedError, ConflictError } from '../errors/ApiError.js';
+import {
+  InvalidCredentialsError,
+  AuthenticationRequiredError,
+  UserInactiveError,
+  EmailExistsError,
+  PhoneExistsError,
+} from '../errors/ApiError.js';
 import prisma from '../config/prisma.js';
 import * as userRepo from '../repositories/userRepository.js';
 import * as accountRepo from '../repositories/accountRepository.js';
@@ -35,10 +41,10 @@ export async function register(input) {
   // Early duplicate checks (cheap, friendly). The unique constraints in
   // PostgreSQL are the real guard; P2002 below closes the race window.
   if (await userRepo.findUserByEmail(prisma, email)) {
-    throw new ConflictError('Email already registered', 'EMAIL_EXISTS');
+    throw new EmailExistsError();
   }
   if (phone && (await userRepo.findUserByPhone(prisma, phone))) {
-    throw new ConflictError('Phone number already registered', 'PHONE_EXISTS');
+    throw new PhoneExistsError();
   }
 
   // Hash BEFORE touching the database — plaintext never crosses the wire
@@ -66,9 +72,9 @@ export async function register(input) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       const target = Array.isArray(err.meta?.target) ? err.meta.target : [];
       if (target.includes('email')) {
-        throw new ConflictError('Email already registered', 'EMAIL_EXISTS');
+        throw new EmailExistsError();
       }
-      throw new ConflictError('Phone number already registered', 'PHONE_EXISTS');
+      throw new PhoneExistsError();
     }
     throw err;
   }
@@ -88,12 +94,12 @@ export async function login(email, password) {
   // or the password is wrong — no account enumeration, no implementation
   // details leaked.
   if (!user || !user.active) {
-    throw new UnauthorizedError('Invalid email or password');
+    throw new InvalidCredentialsError();
   }
 
   const valid = await bcrypt.compare(password, user.password);
   if (!valid) {
-    throw new UnauthorizedError('Invalid email or password');
+    throw new InvalidCredentialsError();
   }
 
   return createAuthResponse(user);
@@ -107,8 +113,11 @@ export async function getProfile(userId) {
   // userId always comes from the verified JWT (req.user.id), never from the
   // request body/query.
   const user = await userRepo.findSafeUserById(prisma, userId);
-  if (!user || !user.active) {
-    throw new UnauthorizedError('User not found');
+  if (!user) {
+    throw new AuthenticationRequiredError('User not found');
+  }
+  if (!user.active) {
+    throw new UserInactiveError();
   }
 
   const account = await accountRepo.findAccountByUserId(prisma, userId);
@@ -118,7 +127,7 @@ export async function getProfile(userId) {
     name: user.name,
     email: user.email,
     phone: user.phone,
-    balance: account ? account.balance.toString() : '0.00',
+    balance: account ? account.balance.toFixed(2) : '0.00',
     currency: account?.currency ?? 'BDT',
     createdAt: user.createdAt,
   };

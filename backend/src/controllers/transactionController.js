@@ -1,4 +1,6 @@
 import * as transactionService from '../services/transactionService.js';
+import { respond } from '../utils/respond.js';
+import { NotFoundError } from '../errors/ApiError.js';
 
 export async function getTransactions(req, res, next) {
   try {
@@ -8,7 +10,7 @@ export async function getTransactions(req, res, next) {
       limit: parseInt(limit),
       offset: parseInt(offset),
     });
-    res.json({ transactions });
+    return respond(res, 200, { transactions });
   } catch (err) {
     next(err);
   }
@@ -18,9 +20,9 @@ export async function getTransactionById(req, res, next) {
   try {
     const transaction = await transactionService.getTransactionById(req.user.id, req.params.id);
     if (!transaction) {
-      return res.status(404).json({ error: 'NOT_FOUND', message: 'Transaction not found' });
+      throw new NotFoundError('Transaction');
     }
-    res.json(transaction);
+    return respond(res, 200, transaction);
   } catch (err) {
     next(err);
   }

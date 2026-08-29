@@ -1,15 +1,25 @@
-import { ApiError } from '../errors/ApiError.js';
+import { AppError } from '../errors/ApiError.js';
+
+// =============================================================================
+// Central error handler — the ONLY place that turns thrown errors into HTTP
+// responses. Every response uses the consistent shape:
+//   { success: false, error: { code, message, details? } }
+// Internal details (stack traces, SQL, Prisma internals) are logged
+// server-side only and NEVER sent to the client.
+// =============================================================================
 
 export function errorHandler(err, req, res, next) {
-  // Full details are logged server-side only — never echoed to the client.
   console.error(`[${new Date().toISOString()}] ${req.method} ${req.path}`, err);
 
-  // Curated, safe errors (validation, auth, conflicts, ...).
-  if (err instanceof ApiError) {
+  // Curated application errors.
+  if (err instanceof AppError) {
     return res.status(err.statusCode).json({
-      error: err.code,
-      message: err.message,
-      details: err.details,
+      success: false,
+      error: {
+        code: err.code,
+        message: err.message,
+        ...(Object.keys(err.details).length > 0 ? { details: err.details } : {}),
+      },
     });
   }
 
@@ -17,54 +27,59 @@ export function errorHandler(err, req, res, next) {
     return handlePrismaError(err, res);
   }
 
-  if (err.name === 'PrismaClientValidationError') {
+  // Malformed JSON body sent by the client.
+  if (err.type === 'entity.parse.failed') {
     return res.status(400).json({
-      error: 'INVALID_REQUEST',
-      message: 'The request is not valid',
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'Invalid request body' },
     });
   }
 
-  // Unknown errors: never leak stack traces, SQL, or internal messages.
-  res.status(500).json({
-    error: 'INTERNAL_ERROR',
-    message: 'Internal server error',
-    details: {},
+  // Unexpected errors — never expose implementation details. This includes
+  // PrismaClientValidationError, which signals an internal bug (our code
+  // passed invalid arguments to Prisma), never a client mistake.
+  return res.status(500).json({
+    success: false,
+    error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
   });
 }
 
 function handlePrismaError(err, res) {
   switch (err.code) {
-    case 'P2002':
-      return res.status(409).json({
-        error: 'DUPLICATE_ENTRY',
-        message: 'A record with this value already exists',
-        details: {},
-      });
+    case 'P2002': {
+      const target = Array.isArray(err.meta?.target) ? err.meta.target.join(',') : '';
+      const field = String(target).toLowerCase();
+      const code = field.includes('email') ? 'EMAIL_EXISTS' : field.includes('phone') ? 'PHONE_EXISTS' : 'DUPLICATE_OPERATION';
+      const message =
+        code === 'EMAIL_EXISTS'
+          ? 'Email already registered'
+          : code === 'PHONE_EXISTS'
+            ? 'Phone number already registered'
+            : 'This operation was already completed';
+      return res.status(409).json({ success: false, error: { code, message } });
+    }
     case 'P2003':
       return res.status(400).json({
-        error: 'INVALID_REFERENCE',
-        message: 'Referenced record does not exist',
-        details: {},
+        success: false,
+        error: { code: 'INVALID_REFERENCE', message: 'Referenced record does not exist' },
       });
     case 'P2025':
       return res.status(404).json({
-        error: 'NOT_FOUND',
-        message: 'Record not found',
-        details: {},
+        success: false,
+        error: { code: 'RESOURCE_NOT_FOUND', message: 'Record not found' },
       });
     default:
       return res.status(500).json({
-        error: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-        details: {},
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
       });
   }
 }
 
+// 404 for unknown routes — same consistent shape.
 export function notFoundHandler(req, res) {
   res.status(404).json({
-    error: 'NOT_FOUND',
-    message: 'Route not found',
-    details: {},
+    success: false,
+    error: { code: 'RESOURCE_NOT_FOUND', message: 'Route not found' },
   });
 }

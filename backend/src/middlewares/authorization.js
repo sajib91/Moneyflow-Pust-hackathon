@@ -1,4 +1,4 @@
-import { ForbiddenError, UnauthorizedError } from '../errors/ApiError.js';
+import { ForbiddenError, AuthenticationRequiredError } from '../errors/ApiError.js';
 
 /**
  * Authorization helpers.
@@ -11,19 +11,11 @@ import { ForbiddenError, UnauthorizedError } from '../errors/ApiError.js';
 /**
  * authorizeResourceOwner(ownerId)
  * Rejects the request unless the authenticated user IS the resource owner.
- *
- * Usage (inside a handler that resolved the resource's owner from the DB):
- *   authorizeResourceOwner(account.userId)(req, res, next)
- * or as a middleware factory when the owner id is known up-front:
- *   router.get('/:id', authenticateUser, (req,res,next) => {
- *     const resource = await repo.findById(req.params.id);
- *     return authorizeResourceOwner(resource.userId)(req, res, next);
- *   });
  */
 export function authorizeResourceOwner(ownerId) {
   return (req, res, next) => {
     if (!req.user) {
-      return next(new UnauthorizedError('Authentication required'));
+      return next(new AuthenticationRequiredError());
     }
     if (req.user.id !== ownerId) {
       return next(new ForbiddenError('You do not have permission to access this resource'));
@@ -40,7 +32,7 @@ export function authorizeResourceOwner(ownerId) {
 export function requireRole(...allowedRoles) {
   return (req, res, next) => {
     if (!req.user) {
-      return next(new UnauthorizedError('Authentication required'));
+      return next(new AuthenticationRequiredError());
     }
     const role = req.user.role;
     if (!role || !allowedRoles.includes(role)) {
