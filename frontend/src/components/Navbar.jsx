@@ -16,7 +16,7 @@ export default function Navbar() {
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             <Link to="/dashboard" className="text-xl font-bold text-blue-600">
-              Moneflow
+              TEAM_BD
             </Link>
             {user && (
               <div className="hidden md:ml-8 md:flex md:space-x-4">
