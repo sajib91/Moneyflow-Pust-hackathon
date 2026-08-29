@@ -5,7 +5,7 @@ export async function createMoneyRequest(tx, data) {
 export async function findRequestById(tx, id, forUpdate = false) {
   if (forUpdate) {
     const rows = await tx.$queryRaw`
-      SELECT * FROM "MoneyRequest" WHERE "id" = ${id}::uuid FOR UPDATE
+      SELECT * FROM "MoneyRequest" WHERE "id" = ${id} FOR UPDATE
     `;
     if (!rows[0]) return null;
     const request = rows[0];

@@ -7,7 +7,7 @@ export async function createAccount(tx, userId, balance) {
 export async function findAccountByUserId(tx, userId, forUpdate = false) {
   if (forUpdate) {
     const rows = await tx.$queryRaw`
-      SELECT * FROM "Account" WHERE "userId" = ${userId}::uuid FOR UPDATE
+      SELECT * FROM "Account" WHERE "userId" = ${userId} FOR UPDATE
     `;
     if (!rows[0]) return null;
     const account = rows[0];
