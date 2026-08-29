@@ -44,8 +44,6 @@ model User {
   updatedAt DateTime @updatedAt
 
   account              Account?        // one-to-one: exactly one account per user
-  sentTransactions     Transaction[]   @relation("SenderTransactions")
-  receivedTransactions Transaction[]   @relation("ReceiverTransactions")
   sentRequests         MoneyRequest[]  @relation("RequesterRequests")
   receivedRequests     MoneyRequest[]  @relation("RequestedFromRequests")
 
