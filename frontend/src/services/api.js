@@ -61,7 +61,10 @@ export const api = {
   },
   transactions: {
     list: (params = {}) => {
-      const qs = new URLSearchParams(params).toString();
+      const cleaned = Object.fromEntries(
+        Object.entries(params).filter(([, v]) => v !== undefined && v !== null)
+      );
+      const qs = new URLSearchParams(cleaned).toString();
       return request(`/transactions?${qs}`);
     },
     get: (id) => request(`/transactions/${id}`),
