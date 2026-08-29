@@ -2,7 +2,13 @@ import * as authService from '../services/authService.js';
 
 export async function register(req, res, next) {
   try {
-    const result = await authService.register(req.body);
+    // Identity comes from validated request body (no userId accepted here).
+    const result = await authService.register({
+      email: req.body.email,
+      phone: req.body.phone,
+      name: req.body.name,
+      password: req.body.password,
+    });
     res.status(201).json(result);
   } catch (err) {
     next(err);
@@ -21,6 +27,7 @@ export async function login(req, res, next) {
 
 export async function getProfile(req, res, next) {
   try {
+    // req.user.id comes from the verified JWT — never from the request body.
     const profile = await authService.getProfile(req.user.id);
     res.json(profile);
   } catch (err) {

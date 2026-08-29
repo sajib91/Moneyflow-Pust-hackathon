@@ -14,6 +14,21 @@ export async function findUserById(tx, id) {
   return tx.user.findUnique({ where: { id } });
 }
 
+// User profile WITHOUT the password hash (never leak it to handlers).
+const safeUserSelect = {
+  id: true,
+  name: true,
+  email: true,
+  phone: true,
+  active: true,
+  createdAt: true,
+  updatedAt: true,
+};
+
+export async function findSafeUserById(tx, id) {
+  return tx.user.findUnique({ where: { id }, select: safeUserSelect });
+}
+
 export async function searchUsers(tx, query, limit, excludeId) {
   return tx.user.findMany({
     where: {

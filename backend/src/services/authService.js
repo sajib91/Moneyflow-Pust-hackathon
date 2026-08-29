@@ -1,68 +1,156 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { Prisma } from '@prisma/client';
 import { config } from '../config/index.js';
-import { ValidationError, UnauthorizedError, ConflictError } from '../errors/ApiError.js';
+import { UnauthorizedError, ConflictError } from '../errors/ApiError.js';
 import prisma from '../config/prisma.js';
 import * as userRepo from '../repositories/userRepository.js';
 import * as accountRepo from '../repositories/accountRepository.js';
 
 const SALT_ROUNDS = 12;
+// Welcome credit applied to every new account, in BDT (DECIMAL(18,2) column).
+// Applied by an explicit database operation inside the registration
+// transaction — never by faking values elsewhere.
+const WELCOME_BALANCE = new Prisma.Decimal('100000.00');
+
+function normalizeEmail(email) {
+  return email.trim().toLowerCase();
+}
+
+function normalizePhone(phone) {
+  return phone?.trim() || null;
+}
+
+// ---------------------------------------------------------------------------
+// Registration
+// ---------------------------------------------------------------------------
 
 export async function register(input) {
-  const existingEmail = await userRepo.findUserByEmail(prisma, input.email);
-  if (existingEmail) throw new ConflictError('Email already registered', 'EMAIL_EXISTS');
+  // Never trust raw input: normalize before any lookup or write.
+  const email = normalizeEmail(input.email);
+  const phone = normalizePhone(input.phone);
+  const name = input.name.trim();
+  const password = input.password;
 
-  const existingPhone = await userRepo.findUserByPhone(prisma, input.phone);
-  if (existingPhone) throw new ConflictError('Phone already registered', 'PHONE_EXISTS');
+  // Early duplicate checks (cheap, friendly). The unique constraints in
+  // PostgreSQL are the real guard; P2002 below closes the race window.
+  if (await userRepo.findUserByEmail(prisma, email)) {
+    throw new ConflictError('Email already registered', 'EMAIL_EXISTS');
+  }
+  if (phone && (await userRepo.findUserByPhone(prisma, phone))) {
+    throw new ConflictError('Phone number already registered', 'PHONE_EXISTS');
+  }
 
-  const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
+  // Hash BEFORE touching the database — plaintext never crosses the wire
+  // further or hits the DB.
+  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
-  const user = await prisma.$transaction(async (tx) => {
-    const newUser = await userRepo.createUser(tx, {
-      email: input.email,
-      phone: input.phone,
-      name: input.name,
-      password: passwordHash,
+  let user;
+  try {
+    user = await prisma.$transaction(async (tx) => {
+      const newUser = await userRepo.createUser(tx, {
+        email,
+        phone,
+        name,
+        password: passwordHash,
+      });
+
+      // Explicit balance initialization: BDT 100,000 via account.create,
+      // atomically with the user row.
+      await accountRepo.createAccount(tx, newUser.id, WELCOME_BALANCE);
+
+      return newUser;
     });
+  } catch (err) {
+    // Two registrations racing on the same email/phone: the unique index wins.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      const target = Array.isArray(err.meta?.target) ? err.meta.target : [];
+      if (target.includes('email')) {
+        throw new ConflictError('Email already registered', 'EMAIL_EXISTS');
+      }
+      throw new ConflictError('Phone number already registered', 'PHONE_EXISTS');
+    }
+    throw err;
+  }
 
-    await accountRepo.createAccount(tx, newUser.id, config.defaultUserBalance);
-
-    return newUser;
-  });
-
-  return generateToken(user);
+  return createAuthResponse(user);
 }
+
+// ---------------------------------------------------------------------------
+// Login
+// ---------------------------------------------------------------------------
 
 export async function login(email, password) {
-  const user = await userRepo.findUserByEmail(prisma, email);
-  if (!user || user.deletedAt) throw new UnauthorizedError('Invalid credentials');
+  const normalized = normalizeEmail(email);
+  const user = await userRepo.findUserByEmail(prisma, normalized);
+
+  // Same message whether the email doesn't exist, the account is inactive,
+  // or the password is wrong — no account enumeration, no implementation
+  // details leaked.
+  if (!user || !user.active) {
+    throw new UnauthorizedError('Invalid email or password');
+  }
 
   const valid = await bcrypt.compare(password, user.password);
-  if (!valid) throw new UnauthorizedError('Invalid credentials');
+  if (!valid) {
+    throw new UnauthorizedError('Invalid email or password');
+  }
 
-  return generateToken(user);
+  return createAuthResponse(user);
 }
 
-function generateToken(user) {
-  const token = jwt.sign({ id: user.id, email: user.email }, config.jwt.secret, {
-    expiresIn: config.jwt.expiresIn,
-  });
+// ---------------------------------------------------------------------------
+// Profile (authenticated)
+// ---------------------------------------------------------------------------
+
+export async function getProfile(userId) {
+  // userId always comes from the verified JWT (req.user.id), never from the
+  // request body/query.
+  const user = await userRepo.findSafeUserById(prisma, userId);
+  if (!user || !user.active) {
+    throw new UnauthorizedError('User not found');
+  }
+
+  const account = await accountRepo.findAccountByUserId(prisma, userId);
+
   return {
-    token,
-    user: { id: user.id, email: user.email, name: user.name },
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    balance: account ? account.balance.toString() : '0.00',
+    currency: account?.currency ?? 'BDT',
+    createdAt: user.createdAt,
   };
 }
 
-export async function getProfile(userId) {
-  const user = await userRepo.findUserById(prisma, userId);
-  if (!user || user.deletedAt) throw new UnauthorizedError('User not found');
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-  const account = await accountRepo.findAccountByUserId(prisma, userId);
+function createAuthResponse(user) {
+  return {
+    token: generateToken(user),
+    user: toSafeUser(user),
+  };
+}
+
+// JWT payload: only identity claims (id, email). No password, no balance,
+// no other sensitive data. `iat`/`exp` are added by jsonwebtoken.
+function generateToken(user) {
+  return jwt.sign(
+    { id: user.id, email: user.email },
+    config.jwt.secret,
+    { expiresIn: config.jwt.expiresIn }
+  );
+}
+
+// Whitelist approach: the password hash (and anything else) is never included.
+function toSafeUser(user) {
   return {
     id: user.id,
-    email: user.email,
-    phone: user.phone,
     name: user.name,
-    balance: account?.balance ?? 0n,
+    email: user.email,
+    phone: user.phone ?? null,
   };
 }

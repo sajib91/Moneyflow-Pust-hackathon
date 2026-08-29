@@ -1,13 +1,15 @@
 import { Router } from 'express';
-import { validate } from '../validators/authValidator.js';
-import { registerSchema, loginSchema } from '../validators/authValidator.js';
+import { validate, registerSchema, loginSchema } from '../validators/authValidator.js';
 import * as authController from '../controllers/authController.js';
-import { authMiddleware } from '../middlewares/auth.js';
+import { authenticateUser } from '../middlewares/auth.js';
 
 const router = Router();
 
+// Public
 router.post('/register', validate(registerSchema), authController.register);
 router.post('/login', validate(loginSchema), authController.login);
-router.get('/me', authMiddleware, authController.getProfile);
+
+// Protected — identity is derived from the verified JWT.
+router.get('/me', authenticateUser, authController.getProfile);
 
 export default router;

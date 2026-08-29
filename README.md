@@ -150,9 +150,16 @@ npm run db:seed                    # seed an empty, migrated database
 ## API Endpoints
 
 ### Authentication
-- `POST /api/auth/register` - Register new user (auto-credits BDT 100,000)
-- `POST /api/auth/login` - Login
-- `GET /api/auth/me` - Get current user profile
+
+Full API documentation and curl examples: [`docs/auth.md`](docs/auth.md)
+
+- `POST /api/auth/register` - Register new user (validates + normalizes email, bcrypt-hashes password, atomically creates user + account with BDT 100,000)
+- `POST /api/auth/login` - Login, returns JWT (identity claims only)
+- `GET /api/auth/me` - Get current user profile + balance (requires `Authorization: Bearer <token>`)
+
+Security: passwords are stored only as bcrypt hashes; user identity always
+comes from the verified JWT, never from the request body; duplicate emails
+are rejected; errors never leak implementation details.
 
 ### Transfers
 - `POST /api/transfers/send` - Send money to another user
@@ -187,4 +194,4 @@ npm run db:seed                    # seed an empty, migrated database
 - All money is simulated (BDT)
 - New users get BDT 100,000 automatically
 - Backend is the source of truth for balances
-- Money stored as integers (poisha) to avoid floating-point errors
+- Money stored as `DECIMAL(18,2)` BDT in PostgreSQL to avoid floating-point errors
