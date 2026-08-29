@@ -35,7 +35,7 @@ export async function register(input) {
 
 export async function login(email, password) {
   const user = await userRepo.findUserByEmail(prisma, email);
-  if (!user || user.deletedAt) throw new UnauthorizedError('Invalid credentials');
+  if (!user || !user.active) throw new UnauthorizedError('Invalid credentials');
 
   const valid = await bcrypt.compare(password, user.password);
   if (!valid) throw new UnauthorizedError('Invalid credentials');
@@ -55,7 +55,7 @@ function generateToken(user) {
 
 export async function getProfile(userId) {
   const user = await userRepo.findUserById(prisma, userId);
-  if (!user || user.deletedAt) throw new UnauthorizedError('User not found');
+  if (!user || !user.active) throw new UnauthorizedError('User not found');
 
   const account = await accountRepo.findAccountByUserId(prisma, userId);
   return {

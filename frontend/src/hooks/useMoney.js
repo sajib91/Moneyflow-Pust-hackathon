@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { api } from './services/api';
-import { useAuth } from './context/AuthContext';
+import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export function useTransfers() {
   const [loading, setLoading] = useState(false);
@@ -33,7 +33,7 @@ export function useTransfers() {
   const searchUsers = async (query) => {
     if (!query.trim()) return [];
     try {
-      return await api.transfers.searchUsers(query);
+      return await api.users.search(query);
     } catch (err) {
       setError(err.message);
       throw err;

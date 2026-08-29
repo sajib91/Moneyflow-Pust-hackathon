@@ -1,14 +1,14 @@
-import { Routes, Route } from 'react-router-dom';
-import { AuthProvider } from '../context/AuthContext';
-import PrivateRoute from './PrivateRoute';
-import PublicRoute from './PublicRoute';
-import Navbar from '../components/Navbar';
-import Login from '../pages/Login';
-import Register from '../pages/Register';
-import Dashboard from '../pages/Dashboard';
-import SendMoney from '../pages/SendMoney';
-import Requests from '../pages/Requests';
-import Transactions from '../pages/Transactions';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import PrivateRoute from './routes/PrivateRoute';
+import PublicRoute from './routes/PublicRoute';
+import Navbar from './components/Navbar';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';
+import SendMoney from './pages/SendMoney';
+import Requests from './pages/Requests';
+import Transactions from './pages/Transactions';
 
 function AppRoutes() {
   return (

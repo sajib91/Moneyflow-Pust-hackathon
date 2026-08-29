@@ -8,7 +8,7 @@ export const config = {
     secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
-  defaultUserBalance: BigInt(process.env.DEFAULT_USER_BALANCE || '10000000'),
+  defaultUserBalance: process.env.DEFAULT_USER_BALANCE || '100000',
   idempotencyTtlHours: parseInt(process.env.IDEMPOTENCY_TTL_HOURS || '24', 10),
 };
 

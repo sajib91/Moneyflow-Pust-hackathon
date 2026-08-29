@@ -12,7 +12,7 @@ function validateAmount(amount) {
   }
 }
 
-export async function sendMoney({ fromUserId, toUserId, amount, idempotencyKey }) {
+export async function sendMoney({ fromUserId, toUserId, amount, idempotencyKey, type = 'TRANSFER', moneyRequestId = null }) {
   validateAmount(amount);
   if (fromUserId === toUserId) throw new SelfTransferError();
 
@@ -43,7 +43,7 @@ export async function sendMoney({ fromUserId, toUserId, amount, idempotencyKey }
     const newReceiverBalance = receiver.balance.plus(amountDecimal);
 
     const transfer = await transferRepo.createTransfer(tx, {
-      type: 'TRANSFER',
+      type,
       status: 'SUCCEEDED',
       senderAccountId: sender.id,
       receiverAccountId: receiver.id,
@@ -53,6 +53,7 @@ export async function sendMoney({ fromUserId, toUserId, amount, idempotencyKey }
       senderBalanceAfter: newSenderBalance,
       receiverBalanceAfter: newReceiverBalance,
       idempotencyKey,
+      moneyRequestId,
     });
 
     const response = {

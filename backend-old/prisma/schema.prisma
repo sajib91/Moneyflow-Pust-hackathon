@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================================================
+// Enums
+// ===========================================================================
+
+enum TransactionType {
+  TRANSFER           // direct send-money between two users
+  REQUEST_SETTLEMENT // settlement of an approved money request
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// ===========================================================================
+// User
+// ===========================================================================
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  phone     String?  @unique
+  password  String // bcrypt hash
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account              Account?        // one-to-one: exactly one account per user
+  sentRequests         MoneyRequest[]  @relation("RequesterRequests")
+  receivedRequests     MoneyRequest[]  @relation("RequestedFromRequests")
+
+  @@index([name])
+}
+
+// ===========================================================================
+// Account
+// ===========================================================================
+
+model Account {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  balance   Decimal  @default(0) @db.Decimal(18, 2) // BDT, 2 decimal places
+  currency  String   @default("BDT")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  sentTransactions     Transaction[] @relation("SenderAccountTransactions")
+  receivedTransactions Transaction[] @relation("ReceiverAccountTransactions")
+
+  // NOTE: the BDT 100,000 welcome credit is applied in the registration
+  // service inside the same DB transaction that creates the user+account,
+  // not baked into the schema default, so the rule is explicit and auditable.
+}
+
+// ===========================================================================
+// Transaction
+// ===========================================================================
+
+model Transaction {
+  id        String            @id @default(uuid())
+  type      TransactionType
+  status    TransactionStatus @default(PENDING)
+
+  senderAccountId   String
+  receiverAccountId String
+  amount            Decimal    @db.Decimal(18, 2) // always positive
+  currency          String     @default("BDT")
+
+  // ---- Audit snapshot (set once at creation, immutable) ----
+  senderNameAtTime     String
+  receiverNameAtTime   String
+  senderBalanceAfter   Decimal @db.Decimal(18, 2)
+  receiverBalanceAfter Decimal @db.Decimal(18, 2)
+
+  idempotencyKey String
+  description    String?
+
+  moneyRequestId String?
+  moneyRequest   MoneyRequest? @relation(fields: [moneyRequestId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  senderAccount   Account @relation("SenderAccountTransactions", fields: [senderAccountId], references: [id], onDelete: Restrict)
+  receiverAccount Account @relation("ReceiverAccountTransactions", fields: [receiverAccountId], references: [id], onDelete: Restrict)
+
+  // Idempotency: one key per sender per operation.
+  @@unique([senderAccountId, idempotencyKey])
+  // History lookups ("all my transactions", ordered newest-first).
+  @@index([senderAccountId, createdAt])
+  @@index([receiverAccountId, createdAt])
+  // Incoming/outgoing status filters and request-settlement lookups.
+  @@index([status])
+  @@index([moneyRequestId])
+}
+
+// ===========================================================================
+// MoneyRequest
+// ===========================================================================
+
+model MoneyRequest {
+  id              String        @id @default(uuid())
+  requesterId     String // user who wants to *receive* money
+  requestedFromId String // user who is being asked to *pay*
+  amount          Decimal       @db.Decimal(18, 2) // always positive
+  currency        String        @default("BDT")
+  description     String?
+  status          RequestStatus @default(PENDING)
+
+  idempotencyKey String
+
+  respondedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requester     User          @relation("RequesterRequests", fields: [requesterId], references: [id], onDelete: Restrict)
+  requestedFrom User          @relation("RequestedFromRequests", fields: [requestedFromId], references: [id], onDelete: Restrict)
+  settlements   Transaction[] // approved request -> settlement transaction(s)
+
+  // Idempotency: one key per requester per operation.
+  @@unique([requesterId, idempotencyKey])
+  // "Pending requests for me" is the hot read: WHERE requestedFromId=? AND status='PENDING' ORDER BY createdAt DESC.
+  @@index([requestedFromId, status, createdAt])
+  // "My sent requests".
+  @@index([requesterId, createdAt])
+}

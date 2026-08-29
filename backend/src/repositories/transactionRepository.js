@@ -1,27 +1,43 @@
-export async function createTransaction(tx, data) {
-  return tx.transaction.create({ data });
-}
-
-export async function createLedgerEntries(tx, entries) {
-  return tx.transaction.createMany({ data: entries });
-}
-
 export async function findTransactionsByUser(tx, userId, options = {}) {
   const { type, limit = 20, offset = 0 } = options;
-  const where = { userId };
-  if (type) {
-    where.type = type === 'incoming' ? 'CREDIT' : type === 'outgoing' ? 'DEBIT' : undefined;
+
+  const where = {
+    OR: [
+      { senderAccount: { userId } },
+      { receiverAccount: { userId } },
+    ],
+  };
+
+  if (type === 'incoming') {
+    where.OR = [{ receiverAccount: { userId } }];
+  } else if (type === 'outgoing') {
+    where.OR = [{ senderAccount: { userId } }];
   }
+
   return tx.transaction.findMany({
     where,
     orderBy: { createdAt: 'desc' },
     take: limit,
     skip: offset,
+    include: {
+      senderAccount: { select: { userId: true } },
+      receiverAccount: { select: { userId: true } },
+    },
   });
 }
 
-export async function findTransactionByReference(tx, referenceId, referenceType) {
+export async function findTransactionByIdForUser(tx, transactionId, userId) {
   return tx.transaction.findFirst({
-    where: { referenceId, referenceType },
+    where: {
+      id: transactionId,
+      OR: [
+        { senderAccount: { userId } },
+        { receiverAccount: { userId } },
+      ],
+    },
+    include: {
+      senderAccount: { select: { userId: true } },
+      receiverAccount: { select: { userId: true } },
+    },
   });
 }

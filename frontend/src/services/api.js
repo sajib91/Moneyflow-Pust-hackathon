@@ -47,7 +47,9 @@ export const api = {
   transfers: {
     send: (data) => request('/transfers/send', { method: 'POST', body: JSON.stringify(data) }),
     balance: () => request('/transfers/balance'),
-    searchUsers: (query, limit = 10) => request(`/transfers/users/search?q=${encodeURIComponent(query)}&limit=${limit}`),
+  },
+  users: {
+    search: (query, limit = 10) => request(`/users/search?q=${encodeURIComponent(query)}&limit=${limit}`),
   },
   requests: {
     create: (data) => request('/requests', { method: 'POST', body: JSON.stringify(data) }),

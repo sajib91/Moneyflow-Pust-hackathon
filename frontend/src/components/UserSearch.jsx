@@ -13,7 +13,7 @@ export function UserSearch({ onSelect, excludeId, placeholder = 'Search by name,
       timeout = setTimeout(async () => {
         setLoading(true);
         try {
-          const { users } = await api.transfers.searchUsers(query);
+          const { users } = await api.users.search(query);
           setResults(users.filter(u => u.id !== excludeId));
         } catch (err) {
           console.error(err);
@@ -62,4 +62,4 @@ export function UserSearch({ onSelect, excludeId, placeholder = 'Search by name,
       )}
     </div>
   );
-}
+}export default UserSearch;
